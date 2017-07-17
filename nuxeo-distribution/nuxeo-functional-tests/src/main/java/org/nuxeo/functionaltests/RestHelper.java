@@ -23,9 +23,11 @@ import static org.nuxeo.functionaltests.AbstractTest.NUXEO_URL;
 import static org.nuxeo.functionaltests.Constants.ADMINISTRATOR;
 
 import java.io.IOException;
+import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -38,6 +40,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
+import org.codehaus.jackson.type.TypeReference;
 import org.nuxeo.client.api.NuxeoClient;
 import org.nuxeo.client.api.objects.Document;
 import org.nuxeo.client.api.objects.Documents;
@@ -231,13 +234,33 @@ public class RestHelper {
         }
     }
 
+    /**
+     * @since 9.3
+     */
+    public static String createDocument(String idOrPath, String type, String title) {
+        return createDocument(idOrPath, type, title, Collections.emptyMap());
+    }
+
     public static String createDocument(String idOrPath, String type, String title, String description) {
+        Map<String, Object> props;
+        if (description == null) {
+            props = Collections.emptyMap();
+        } else {
+            props = Collections.singletonMap("dc:description", description);
+        }
+        return createDocument(idOrPath, type, title, props);
+    }
+
+    /**
+     * @since 9.3
+     */
+    public static String createDocument(String idOrPath, String type, String title, Map<String, Object> props) {
         Document document = new Document(title, type);
         Map<String, Object> properties = new HashMap<>();
-        properties.put("dc:title", title);
-        if (description != null) {
-            properties.put("dc:description", description);
+        if (props != null) {
+            properties.putAll(props);
         }
+        properties.put("dc:title", title);
         document.setProperties(properties);
 
         if (idOrPath.startsWith("/")) {
@@ -322,6 +345,20 @@ public class RestHelper {
         }
     }
 
+    public static Map<String, Object> fetchDirectoryEntry(String directoryName, String entryId) {
+        Response response = CLIENT.get(NUXEO_URL + "/api/v1/directory/" + directoryName + "/" + entryId);
+        if (!response.isSuccessful()) {
+            throw new NuxeoClientException(
+                    String.format("Unable to fetch entry for directory %s/%s", directoryName, entryId));
+        }
+        try (ResponseBody responseBody = response.body();
+                Reader reader = responseBody.charStream()) {
+            return MAPPER.readValue(reader, new TypeReference<HashMap<String, Object>>(){});
+        } catch (IOException e) {
+            throw new NuxeoClientException(e);
+        }
+    }
+
     /**
      * @since 9.2
      */
@@ -352,6 +389,24 @@ public class RestHelper {
     public static void logOnServer(String level, String message) {
         CLIENT.get(String.format("%s/restAPI/systemLog?token=dolog&level=%s&message=%s", AbstractTest.NUXEO_URL, level,
                 URIUtils.quoteURIPathComponent(message, true)));
+    }
+
+    /**
+     * Performs a GET request and return whether or not request was successful.
+     *
+     * @since 9.3
+     */
+    public static boolean get(String url) {
+        return CLIENT.get(NUXEO_URL + "/" + url).isSuccessful();
+    }
+
+    /**
+     * Performs a POST request and return whether or not request was successful.
+     *
+     * @since 9.3
+     */
+    public static boolean post(String path, String body) {
+        return CLIENT.post(NUXEO_URL + path, body).isSuccessful();
     }
 
 }
